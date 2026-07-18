@@ -13,7 +13,8 @@ class Student(Base):
     institution = Column(String)
     programme = Column(String)
     status = Column(String, default="Pending")
+
     applications = relationship(
-    "LoanApplication",
-    back_populates="student"
-)
+        "LoanApplication",
+        back_populates="student"
+    )
