@@ -1,5 +1,6 @@
 from pathlib import Path
 import shutil
+import uuid
 
 from fastapi import (
     APIRouter,
@@ -14,6 +15,8 @@ from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models.document import Document
 from app.models.application import LoanApplication
+from app.models.user import User
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/documents",
@@ -30,10 +33,11 @@ def create_document(
     application_id: int = Form(...),
     document_type: str = Form(...),
     file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Upload a student document and save its information.
+    Upload a student PDF document and save its information.
     """
 
     # Check loan application exists
@@ -49,9 +53,22 @@ def create_document(
             detail="Loan application not found",
         )
 
-    # Save uploaded file
-    file_path = UPLOAD_DIR / file.filename
+    # Only allow PDF files
+    if (
+        file.content_type != "application/pdf"
+        or not file.filename.lower().endswith(".pdf")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are allowed.",
+        )
 
+    # Generate unique filename
+    unique_filename = f"{uuid.uuid4()}.pdf"
+
+    file_path = UPLOAD_DIR / unique_filename
+
+    # Save uploaded file
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -59,8 +76,8 @@ def create_document(
     new_document = Document(
         application_id=application_id,
         document_type=document_type,
-        file_name=file.filename,
-        file_path=str(file_path),
+        file_name=file.filename,      # Original filename
+        file_path=str(file_path),     # Stored filename
     )
 
     db.add(new_document)
