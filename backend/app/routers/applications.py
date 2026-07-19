@@ -25,10 +25,10 @@ router = APIRouter(
 
 @router.get("/", response_model=list[LoanApplicationResponse])
 def get_applications(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return db.query(LoanApplication).all()
-
 
 
 @router.post("/", response_model=LoanApplicationResponse)
@@ -50,7 +50,6 @@ def create_application(
             detail="Student does not exist"
         )
 
-
     existing_application = (
         db.query(LoanApplication)
         .filter(
@@ -66,14 +65,12 @@ def create_application(
             detail="Student has already applied for this academic session"
         )
 
-
     new_application = LoanApplication(
         student_id=application.student_id,
         loan_type=application.loan_type,
         academic_session=application.academic_session,
         amount_requested=application.amount_requested,
     )
-
 
     db.add(new_application)
     db.commit()
@@ -82,11 +79,11 @@ def create_application(
     return new_application
 
 
-
 @router.get("/{application_id}", response_model=LoanApplicationResponse)
 def get_application(
     application_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
 
     application = (
@@ -104,12 +101,12 @@ def get_application(
     return application
 
 
-
 @router.put("/{application_id}", response_model=LoanApplicationResponse)
 def update_application(
     application_id: int,
     updated_application: LoanApplicationCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
 
     application = (
@@ -123,7 +120,6 @@ def update_application(
             status_code=404,
             detail="Loan application not found"
         )
-
 
     student = (
         db.query(Student)
@@ -137,12 +133,10 @@ def update_application(
             detail="Student does not exist"
         )
 
-
     application.student_id = updated_application.student_id
     application.loan_type = updated_application.loan_type
     application.academic_session = updated_application.academic_session
     application.amount_requested = updated_application.amount_requested
-
 
     db.commit()
     db.refresh(application)
@@ -150,11 +144,11 @@ def update_application(
     return application
 
 
-
 @router.delete("/{application_id}")
 def delete_application(
     application_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
 
     application = (
@@ -169,15 +163,12 @@ def delete_application(
             detail="Loan application not found"
         )
 
-
     db.delete(application)
     db.commit()
-
 
     return {
         "message": "Loan application deleted successfully"
     }
-
 
 
 @router.put("/{application_id}/status", response_model=LoanApplicationResponse)
@@ -185,6 +176,7 @@ def update_application_status(
     application_id: int,
     status_update: StatusUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
 
     application = (
@@ -198,7 +190,6 @@ def update_application_status(
             status_code=404,
             detail="Loan application not found"
         )
-
 
     allowed_statuses = [
         "Pending",
@@ -209,13 +200,11 @@ def update_application_status(
         "Disbursed",
     ]
 
-
     if status_update.status not in allowed_statuses:
         raise HTTPException(
             status_code=400,
             detail=f"Status must be one of: {', '.join(allowed_statuses)}"
         )
-
 
     application.status = status_update.status
 
