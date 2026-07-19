@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.student import Student
+from app.models.user import User
 from app.schemas.student import StudentCreate, StudentResponse
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/students",
@@ -11,14 +13,20 @@ router = APIRouter(
 )
 
 
-
 @router.get("/", response_model=list[StudentResponse])
-def get_students(db: Session = Depends(get_db)):
+def get_students(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     return db.query(Student).all()
 
 
 @router.post("/", response_model=StudentResponse)
-def create_student(student: StudentCreate, db: Session = Depends(get_db)):
+def create_student(
+    student: StudentCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     new_student = Student(
         first_name=student.first_name,
         last_name=student.last_name,
@@ -32,8 +40,14 @@ def create_student(student: StudentCreate, db: Session = Depends(get_db)):
     db.refresh(new_student)
 
     return new_student
+
+
 @router.get("/{student_id}", response_model=StudentResponse)
-def get_student(student_id: int, db: Session = Depends(get_db)):
+def get_student(
+    student_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     student = db.query(Student).filter(Student.id == student_id).first()
 
     if student is None:
@@ -43,11 +57,14 @@ def get_student(student_id: int, db: Session = Depends(get_db)):
         )
 
     return student
+
+
 @router.put("/{student_id}", response_model=StudentResponse)
 def update_student(
     student_id: int,
     updated_student: StudentCreate,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     student = db.query(Student).filter(Student.id == student_id).first()
 
@@ -68,8 +85,13 @@ def update_student(
 
     return student
 
+
 @router.delete("/{student_id}")
-def delete_student(student_id: int, db: Session = Depends(get_db)):
+def delete_student(
+    student_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     student = db.query(Student).filter(Student.id == student_id).first()
 
     if student is None:

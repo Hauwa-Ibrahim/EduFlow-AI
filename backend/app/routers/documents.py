@@ -10,18 +10,23 @@ from fastapi import (
     File,
     Form,
 )
+
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.document import Document
 from app.models.application import LoanApplication
 from app.models.user import User
+
 from app.auth.dependencies import get_current_user
+from app.services.pdf_service import extract_text_from_pdf
+
 
 router = APIRouter(
     prefix="/documents",
     tags=["Documents"],
 )
+
 
 # Create uploads directory automatically
 UPLOAD_DIR = Path("uploads")
@@ -37,7 +42,9 @@ def create_document(
     db: Session = Depends(get_db),
 ):
     """
-    Upload a student PDF document and save its information.
+    Upload a student PDF document,
+    save information,
+    and extract text.
     """
 
     # Check loan application exists
@@ -53,6 +60,7 @@ def create_document(
             detail="Loan application not found",
         )
 
+
     # Only allow PDF files
     if (
         file.content_type != "application/pdf"
@@ -63,26 +71,37 @@ def create_document(
             detail="Only PDF files are allowed.",
         )
 
+
     # Generate unique filename
     unique_filename = f"{uuid.uuid4()}.pdf"
 
     file_path = UPLOAD_DIR / unique_filename
 
+
     # Save uploaded file
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+
+
+    # Extract PDF text
+    extracted_text = extract_text_from_pdf(
+        str(file_path)
+    )
+
 
     # Save document record
     new_document = Document(
         application_id=application_id,
         document_type=document_type,
-        file_name=file.filename,      # Original filename
-        file_path=str(file_path),     # Stored filename
+        file_name=file.filename,
+        file_path=str(file_path),
     )
+
 
     db.add(new_document)
     db.commit()
     db.refresh(new_document)
+
 
     return {
         "message": "Document uploaded successfully",
@@ -94,4 +113,5 @@ def create_document(
             "file_path": new_document.file_path,
             "verification_status": new_document.verification_status,
         },
+        "extracted_text": extracted_text,
     }
