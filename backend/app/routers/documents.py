@@ -22,6 +22,7 @@ from app.auth.dependencies import get_current_user
 
 from app.services.pdf_service import extract_text_from_pdf
 from app.services.ai_extractor import extract_student_information
+from app.services.verification_service import verify_application
 
 
 router = APIRouter(
@@ -45,13 +46,13 @@ def create_document(
 ):
     """
     Upload a PDF document,
-    save it,
-    extract its text,
+    extract its contents,
     extract structured information,
-    and store its metadata.
+    verify it against the student's application,
+    and save the document.
     """
 
-    # Verify application exists
+    # Check application exists
     application = (
         db.query(LoanApplication)
         .filter(LoanApplication.id == application_id)
@@ -64,7 +65,7 @@ def create_document(
             detail="Loan application not found",
         )
 
-    # Accept only PDF files
+    # Check PDF
     if (
         file.content_type != "application/pdf"
         or not file.filename.lower().endswith(".pdf")
@@ -74,27 +75,41 @@ def create_document(
             detail="Only PDF files are allowed.",
         )
 
-    # Generate unique filename
     unique_filename = f"{uuid.uuid4()}.pdf"
     file_path = UPLOAD_DIR / unique_filename
 
     try:
+
         # Save uploaded file
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Extract text from PDF
+        # Extract raw text
         extracted_text = extract_text_from_pdf(str(file_path))
 
         # Extract structured information
-        structured_data = extract_student_information(extracted_text)
+        structured_data = extract_student_information(
+            extracted_text
+        )
 
-        # Save metadata
+        # Get student linked to this application
+        student = application.student
+
+        # Compare application vs admission letter
+        verification_result = verify_application(
+            student,
+            structured_data,
+        )
+
+        # Save document
         new_document = Document(
             application_id=application_id,
             document_type=document_type,
             file_name=file.filename,
             file_path=str(file_path),
+            verification_status=verification_result[
+                "verification_status"
+            ],
         )
 
         db.add(new_document)
@@ -103,6 +118,7 @@ def create_document(
 
         return {
             "message": "Document uploaded successfully",
+
             "document": {
                 "id": new_document.id,
                 "application_id": new_document.application_id,
@@ -111,11 +127,16 @@ def create_document(
                 "file_path": new_document.file_path,
                 "verification_status": new_document.verification_status,
             },
+
             "structured_data": structured_data,
+
+            "verification_result": verification_result,
+
             "extracted_text": extracted_text,
         }
 
     except Exception as e:
+
         db.rollback()
 
         raise HTTPException(
