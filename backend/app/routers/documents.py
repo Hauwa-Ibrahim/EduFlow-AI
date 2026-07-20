@@ -9,15 +9,14 @@ from fastapi import (
     UploadFile,
     File,
     Form,
+    status,
 )
-
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
-from app.models.document import Document
 from app.models.application import LoanApplication
+from app.models.document import Document
 from app.models.user import User
-
 from app.auth.dependencies import get_current_user
 from app.services.pdf_service import extract_text_from_pdf
 
@@ -27,13 +26,12 @@ router = APIRouter(
     tags=["Documents"],
 )
 
-
-# Create uploads directory automatically
+# Create uploads folder automatically
 UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@router.post("/")
+@router.post("/", status_code=status.HTTP_201_CREATED)
 def create_document(
     application_id: int = Form(...),
     document_type: str = Form(...),
@@ -42,12 +40,13 @@ def create_document(
     db: Session = Depends(get_db),
 ):
     """
-    Upload a student PDF document,
-    save information,
-    and extract text.
+    Upload a PDF document,
+    save it,
+    extract its text,
+    and store its metadata.
     """
 
-    # Check loan application exists
+    # Verify application exists
     application = (
         db.query(LoanApplication)
         .filter(LoanApplication.id == application_id)
@@ -56,62 +55,61 @@ def create_document(
 
     if application is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Loan application not found",
         )
 
-
-    # Only allow PDF files
+    # Accept only PDF files
     if (
         file.content_type != "application/pdf"
         or not file.filename.lower().endswith(".pdf")
     ):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only PDF files are allowed.",
         )
 
-
     # Generate unique filename
     unique_filename = f"{uuid.uuid4()}.pdf"
-
     file_path = UPLOAD_DIR / unique_filename
 
+    try:
+        # Save uploaded file
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    # Save uploaded file
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        # Extract text
+        extracted_text = extract_text_from_pdf(str(file_path))
 
+        # Save metadata
+        new_document = Document(
+            application_id=application_id,
+            document_type=document_type,
+            file_name=file.filename,
+            file_path=str(file_path),
+        )
 
-    # Extract PDF text
-    extracted_text = extract_text_from_pdf(
-        str(file_path)
-    )
+        db.add(new_document)
+        db.commit()
+        db.refresh(new_document)
 
+        return {
+            "message": "Document uploaded successfully",
+            "document": {
+                "id": new_document.id,
+                "application_id": new_document.application_id,
+                "document_type": new_document.document_type,
+                "file_name": new_document.file_name,
+                "file_path": new_document.file_path,
+                "verification_status": new_document.verification_status,
+            },
+            "extracted_text": extracted_text,
+        }
 
-    # Save document record
-    new_document = Document(
-        application_id=application_id,
-        document_type=document_type,
-        file_name=file.filename,
-        file_path=str(file_path),
-    )
+    except Exception as e:
+        db.rollback()
 
-
-    db.add(new_document)
-    db.commit()
-    db.refresh(new_document)
-
-
-    return {
-        "message": "Document uploaded successfully",
-        "document": {
-            "id": new_document.id,
-            "application_id": new_document.application_id,
-            "document_type": new_document.document_type,
-            "file_name": new_document.file_name,
-            "file_path": new_document.file_path,
-            "verification_status": new_document.verification_status,
-        },
-        "extracted_text": extracted_text,
-    }
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Document upload failed: {str(e)}",
+        )
