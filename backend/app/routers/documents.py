@@ -17,14 +17,18 @@ from app.database.database import get_db
 from app.models.application import LoanApplication
 from app.models.document import Document
 from app.models.user import User
+
 from app.auth.dependencies import get_current_user
+
 from app.services.pdf_service import extract_text_from_pdf
+from app.services.ai_extractor import extract_student_information
 
 
 router = APIRouter(
     prefix="/documents",
     tags=["Documents"],
 )
+
 
 # Create uploads folder automatically
 UPLOAD_DIR = Path("uploads")
@@ -43,6 +47,7 @@ def create_document(
     Upload a PDF document,
     save it,
     extract its text,
+    extract structured information,
     and store its metadata.
     """
 
@@ -78,8 +83,11 @@ def create_document(
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Extract text
+        # Extract text from PDF
         extracted_text = extract_text_from_pdf(str(file_path))
+
+        # Extract structured information
+        structured_data = extract_student_information(extracted_text)
 
         # Save metadata
         new_document = Document(
@@ -103,6 +111,7 @@ def create_document(
                 "file_path": new_document.file_path,
                 "verification_status": new_document.verification_status,
             },
+            "structured_data": structured_data,
             "extracted_text": extracted_text,
         }
 
