@@ -8,34 +8,78 @@ class LoanApplication(Base):
 
     __tablename__ = "loan_applications"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
 
     student_id = Column(
         Integer,
         ForeignKey("students.id"),
-        nullable=False
+        nullable=False,
     )
 
-    loan_type = Column(String, nullable=False)
+    loan_type = Column(
+        String,
+        nullable=False,
+    )
 
-    academic_session = Column(String, nullable=False)
+    academic_session = Column(
+        String,
+        nullable=False,
+    )
 
-    amount_requested = Column(Integer, nullable=False)
+    amount_requested = Column(
+        Integer,
+        nullable=False,
+    )
 
     status = Column(
         String,
-        default="Pending"
+        default="Pending",
     )
 
+    # ==========================================================
+    # AI Decision Fields
+    # ==========================================================
+
+    eligibility_score = Column(
+        Integer,
+        default=0,
+    )
+
+    recommendation = Column(
+        String,
+        default="Pending",
+    )
+
+    risk_level = Column(
+        String,
+        default="Unknown",
+    )
+
+    ai_confidence = Column(
+        Integer,
+        default=0,
+    )
+
+    verification_status = Column(
+        String,
+        default="Pending",
+    )
+
+    # ==========================================================
+    # Relationships
+    # ==========================================================
 
     student = relationship(
         "Student",
-        back_populates="applications"
+        back_populates="applications",
     )
-
 
     documents = relationship(
         "Document",
         back_populates="application",
-        cascade="all, delete"
+        cascade="all, delete",
     )
