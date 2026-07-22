@@ -18,3 +18,9 @@ class Student(Base):
         "LoanApplication",
         back_populates="student"
     )
+
+    notifications = relationship(
+    "Notification",
+    back_populates="student",
+    cascade="all, delete",
+)

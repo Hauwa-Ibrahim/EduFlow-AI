@@ -1,4 +1,10 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    ForeignKey,
+    DateTime,
+)
 from sqlalchemy.orm import relationship
 
 from app.database.database import Base
@@ -67,6 +73,30 @@ class LoanApplication(Base):
     verification_status = Column(
         String,
         default="Pending",
+    )
+
+    # ==========================================================
+    # Officer Review Fields
+    # ==========================================================
+
+    officer_decision = Column(
+        String,
+        nullable=True,
+    )
+
+    officer_comment = Column(
+        String,
+        nullable=True,
+    )
+
+    reviewed_by = Column(
+        String,
+        nullable=True,
+    )
+
+    reviewed_at = Column(
+        DateTime,
+        nullable=True,
     )
 
     # ==========================================================

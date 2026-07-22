@@ -20,6 +20,7 @@ from app.models.document import Document
 from app.models.user import User
 
 from app.auth.dependencies import get_current_user
+from app.models.notification import Notification
 
 from app.services.pdf_service import extract_text_from_pdf
 from app.services.ai_extractor import extract_student_information
@@ -27,6 +28,7 @@ from app.services.verification_service import verify_application
 from app.services.eligibility import evaluate_eligibility
 from app.services.decision_engine import generate_ai_decision
 from app.services.application_service import update_application_from_ai
+from app.services.audit_service import create_audit_log
 
 
 router = APIRouter(
@@ -53,15 +55,17 @@ def create_document(
     """
     Upload a PDF document.
 
-    Workflow:
+    Workflow
+
     1. Save uploaded PDF
-    2. Extract text (OCR)
-    3. Extract structured student information
-    4. Verify against student application
-    5. Evaluate eligibility
-    6. Generate AI decision
-    7. Save document
-    8. Update loan application
+    2. OCR Extraction
+    3. AI Information Extraction
+    4. Verification
+    5. Eligibility Evaluation
+    6. AI Decision
+    7. Save Document
+    8. Update Application
+    9. Create Audit Log
     """
 
     # ---------------------------------------------------------
@@ -97,7 +101,6 @@ def create_document(
     file_path = UPLOAD_DIR / unique_filename
 
     try:
-
         # ---------------------------------------------------------
         # Save uploaded PDF
         # ---------------------------------------------------------
@@ -109,9 +112,7 @@ def create_document(
         # OCR Extraction
         # ---------------------------------------------------------
 
-        extracted_text = extract_text_from_pdf(
-            str(file_path)
-        )
+        extracted_text = extract_text_from_pdf(str(file_path))
 
         # ---------------------------------------------------------
         # AI Information Extraction
@@ -151,7 +152,7 @@ def create_document(
         )
 
         # ---------------------------------------------------------
-        # Save document record
+        # Save Document
         # ---------------------------------------------------------
 
         new_document = Document(
@@ -176,7 +177,7 @@ def create_document(
         db.add(new_document)
 
         # ---------------------------------------------------------
-        # Update application using AI results
+        # Update Application
         # ---------------------------------------------------------
 
         update_application_from_ai(
@@ -186,7 +187,68 @@ def create_document(
         )
 
         # ---------------------------------------------------------
-        # Commit transaction
+        # Audit Log
+        # ---------------------------------------------------------
+
+        create_audit_log(
+            db=db,
+            application_id=application.id,
+            action="Document Uploaded",
+            performed_by=current_user.email,
+            details=f"{document_type} uploaded and processed by AI",
+        )
+
+        # ---------------------------------------------------------
+        # Create Notification
+        # ---------------------------------------------------------
+
+        if application.status == "Approved":
+            title = "Loan Application Approved"
+            message = (
+                "Congratulations! Your loan application has been approved."
+            )
+
+        elif application.status == "Rejected":
+            title = "Loan Application Rejected"
+            message = (
+                "Your loan application was rejected after AI document verification."
+            )
+
+        elif application.status == "Under Review":
+            title = "Application Under Review"
+            message = (
+                "Your application is currently under review by our loan team."
+            )
+
+        elif application.status == "Verified":
+            title = "Documents Verified"
+            message = (
+                "Your admission documents have been successfully verified."
+            )
+
+        elif application.status == "Disbursed":
+            title = "Loan Disbursed"
+            message = (
+                "Congratulations! Your student loan has been successfully disbursed."
+            )
+
+        else:
+            title = "Loan Application Update"
+            message = (
+                f"Your application status is now {application.status}."
+            )
+
+        notification = Notification(
+            student_id=application.student_id,
+            title=title,
+            message=message,
+            notification_type="Application",
+        )
+
+        db.add(notification)
+
+        # ---------------------------------------------------------
+        # Commit
         # ---------------------------------------------------------
 
         db.commit()
@@ -195,13 +257,11 @@ def create_document(
         db.refresh(application)
 
         # ---------------------------------------------------------
-        # Success Response
+        # Response
         # ---------------------------------------------------------
 
         return {
-
             "message": "Document uploaded successfully",
-
             "application": {
                 "id": application.id,
                 "status": application.status,
@@ -211,7 +271,6 @@ def create_document(
                 "ai_confidence": application.ai_confidence,
                 "verification_status": application.verification_status,
             },
-
             "document": {
                 "id": new_document.id,
                 "application_id": new_document.application_id,
@@ -223,16 +282,10 @@ def create_document(
                 "matched_fields": new_document.matched_fields,
                 "mismatched_fields": new_document.mismatched_fields,
             },
-
             "structured_data": structured_data,
-
             "verification_result": verification_result,
-
             "eligibility_result": eligibility_result,
-
             "ai_decision": ai_decision,
-
-            # Full OCR text (useful during development)
             "extracted_text": extracted_text,
         }
 
@@ -240,7 +293,6 @@ def create_document(
 
         db.rollback()
 
-        # Remove uploaded file if an error occurred
         if file_path.exists():
             file_path.unlink()
 

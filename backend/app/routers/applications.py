@@ -15,11 +15,17 @@ from app.schemas.application import (
 )
 
 from app.schemas.status import StatusUpdate
+from app.schemas.officer_review import (
+    OfficerReview,
+    OfficerReviewResponse,
+)
+
+from app.services.officer_review_service import review_application
 
 
 router = APIRouter(
     prefix="/applications",
-    tags=["Loan Applications"]
+    tags=["Loan Applications"],
 )
 
 
@@ -47,7 +53,7 @@ def create_application(
     if student is None:
         raise HTTPException(
             status_code=404,
-            detail="Student does not exist"
+            detail="Student does not exist",
         )
 
     existing_application = (
@@ -62,7 +68,7 @@ def create_application(
     if existing_application:
         raise HTTPException(
             status_code=400,
-            detail="Student has already applied for this academic session"
+            detail="Student has already applied for this academic session",
         )
 
     new_application = LoanApplication(
@@ -95,7 +101,7 @@ def get_application(
     if application is None:
         raise HTTPException(
             status_code=404,
-            detail="Loan application not found"
+            detail="Loan application not found",
         )
 
     return application
@@ -118,7 +124,7 @@ def update_application(
     if application is None:
         raise HTTPException(
             status_code=404,
-            detail="Loan application not found"
+            detail="Loan application not found",
         )
 
     student = (
@@ -130,7 +136,7 @@ def update_application(
     if student is None:
         raise HTTPException(
             status_code=404,
-            detail="Student does not exist"
+            detail="Student does not exist",
         )
 
     application.student_id = updated_application.student_id
@@ -160,14 +166,14 @@ def delete_application(
     if application is None:
         raise HTTPException(
             status_code=404,
-            detail="Loan application not found"
+            detail="Loan application not found",
         )
 
     db.delete(application)
     db.commit()
 
     return {
-        "message": "Loan application deleted successfully"
+        "message": "Loan application deleted successfully",
     }
 
 
@@ -188,7 +194,7 @@ def update_application_status(
     if application is None:
         raise HTTPException(
             status_code=404,
-            detail="Loan application not found"
+            detail="Loan application not found",
         )
 
     allowed_statuses = [
@@ -203,7 +209,7 @@ def update_application_status(
     if status_update.status not in allowed_statuses:
         raise HTTPException(
             status_code=400,
-            detail=f"Status must be one of: {', '.join(allowed_statuses)}"
+            detail=f"Status must be one of: {', '.join(allowed_statuses)}",
         )
 
     application.status = status_update.status
@@ -212,3 +218,59 @@ def update_application_status(
     db.refresh(application)
 
     return application
+
+
+# ==========================================================
+# Officer Review Endpoint
+# ==========================================================
+
+@router.put(
+    "/{application_id}/review",
+    response_model=OfficerReviewResponse,
+)
+def officer_review(
+    application_id: int,
+    review: OfficerReview,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    application = (
+        db.query(LoanApplication)
+        .filter(LoanApplication.id == application_id)
+        .first()
+    )
+
+    if application is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Loan application not found",
+        )
+
+    try:
+
+       review_application(
+    db=db,
+    application=application,
+    decision=review.decision,
+    comment=review.comment,
+    reviewer=current_user.email,
+)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e),
+        )
+
+    db.commit()
+    db.refresh(application)
+
+    return {
+        "application_id": application.id,
+        "status": application.status,
+        "officer_decision": application.officer_decision,
+        "officer_comment": application.officer_comment,
+        "reviewed_by": application.reviewed_by,
+        "reviewed_at": application.reviewed_at.isoformat(),
+    }
