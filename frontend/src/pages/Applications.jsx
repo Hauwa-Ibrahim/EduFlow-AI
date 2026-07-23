@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 
 function Applications() {
   const [applications, setApplications] = useState([]);
   const [search, setSearch] = useState("");
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchApplications = async () => {
@@ -101,9 +104,13 @@ function Applications() {
                 }}
               >
                 <td style={{ padding: "12px" }}>{app.id}</td>
+
                 <td>{app.student_id}</td>
+
                 <td>{app.loan_type}</td>
+
                 <td>{app.academic_session}</td>
+
                 <td>₦{app.amount_requested}</td>
 
                 <td>
@@ -125,6 +132,9 @@ function Applications() {
 
                 <td>
                   <button
+                    onClick={() =>
+                      navigate(`/applications/${app.id}`)
+                    }
                     style={{
                       padding: "6px 12px",
                       background: "#2563eb",
