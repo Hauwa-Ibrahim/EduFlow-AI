@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database.database import get_db
 
@@ -12,6 +12,8 @@ from app.auth.dependencies import get_current_user
 from app.schemas.application import (
     LoanApplicationCreate,
     LoanApplicationResponse,
+    ApplicationDetailsResponse,
+    OfficerReviewSummary,
 )
 
 from app.schemas.status import StatusUpdate
@@ -29,13 +31,25 @@ router = APIRouter(
 )
 
 
+# ==========================================================
+# Get All Applications
+# ==========================================================
+
 @router.get("/", response_model=list[LoanApplicationResponse])
 def get_applications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return db.query(LoanApplication).all()
+    return (
+        db.query(LoanApplication)
+        .options(joinedload(LoanApplication.student))
+        .all()
+    )
 
+
+# ==========================================================
+# Create Application
+# ==========================================================
 
 @router.post("/", response_model=LoanApplicationResponse)
 def create_application(
@@ -82,10 +96,22 @@ def create_application(
     db.commit()
     db.refresh(new_application)
 
-    return new_application
+    return (
+        db.query(LoanApplication)
+        .options(joinedload(LoanApplication.student))
+        .filter(LoanApplication.id == new_application.id)
+        .first()
+    )
 
 
-@router.get("/{application_id}", response_model=LoanApplicationResponse)
+# ==========================================================
+# Get Application Details
+# ==========================================================
+
+@router.get(
+    "/{application_id}",
+    response_model=ApplicationDetailsResponse,
+)
 def get_application(
     application_id: int,
     db: Session = Depends(get_db),
@@ -94,6 +120,10 @@ def get_application(
 
     application = (
         db.query(LoanApplication)
+        .options(
+            joinedload(LoanApplication.student),
+            joinedload(LoanApplication.documents),
+        )
         .filter(LoanApplication.id == application_id)
         .first()
     )
@@ -104,8 +134,40 @@ def get_application(
             detail="Loan application not found",
         )
 
-    return application
+    return ApplicationDetailsResponse(
+        id=application.id,
+        student_id=application.student_id,
+        loan_type=application.loan_type,
+        academic_session=application.academic_session,
+        amount_requested=application.amount_requested,
+        status=application.status,
 
+        eligibility_score=application.eligibility_score,
+        recommendation=application.recommendation,
+        risk_level=application.risk_level,
+        ai_confidence=application.ai_confidence,
+        verification_status=application.verification_status,
+
+        student=application.student,
+
+        documents=application.documents,
+
+        officer_review=OfficerReviewSummary(
+            decision=application.officer_decision,
+            comment=application.officer_comment,
+            reviewed_by=application.reviewed_by,
+            reviewed_at=(
+                application.reviewed_at.isoformat()
+                if application.reviewed_at
+                else None
+            ),
+        ),
+    )
+
+
+# ==========================================================
+# Update Application
+# ==========================================================
 
 @router.put("/{application_id}", response_model=LoanApplicationResponse)
 def update_application(
@@ -147,8 +209,17 @@ def update_application(
     db.commit()
     db.refresh(application)
 
-    return application
+    return (
+        db.query(LoanApplication)
+        .options(joinedload(LoanApplication.student))
+        .filter(LoanApplication.id == application.id)
+        .first()
+    )
 
+
+# ==========================================================
+# Delete Application
+# ==========================================================
 
 @router.delete("/{application_id}")
 def delete_application(
@@ -176,6 +247,10 @@ def delete_application(
         "message": "Loan application deleted successfully",
     }
 
+
+# ==========================================================
+# Update Status
+# ==========================================================
 
 @router.put("/{application_id}/status", response_model=LoanApplicationResponse)
 def update_application_status(
@@ -217,11 +292,16 @@ def update_application_status(
     db.commit()
     db.refresh(application)
 
-    return application
+    return (
+        db.query(LoanApplication)
+        .options(joinedload(LoanApplication.student))
+        .filter(LoanApplication.id == application.id)
+        .first()
+    )
 
 
 # ==========================================================
-# Officer Review Endpoint
+# Officer Review
 # ==========================================================
 
 @router.put(
@@ -248,14 +328,13 @@ def officer_review(
         )
 
     try:
-
-       review_application(
-    db=db,
-    application=application,
-    decision=review.decision,
-    comment=review.comment,
-    reviewer=current_user.email,
-)
+        review_application(
+            db=db,
+            application=application,
+            decision=review.decision,
+            comment=review.comment,
+            reviewer=current_user.email,
+        )
 
     except ValueError as e:
         raise HTTPException(
@@ -272,5 +351,9 @@ def officer_review(
         "officer_decision": application.officer_decision,
         "officer_comment": application.officer_comment,
         "reviewed_by": application.reviewed_by,
-        "reviewed_at": application.reviewed_at.isoformat(),
+        "reviewed_at": (
+            application.reviewed_at.isoformat()
+            if application.reviewed_at
+            else None
+        ),
     }

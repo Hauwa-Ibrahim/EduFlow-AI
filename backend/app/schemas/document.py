@@ -11,6 +11,22 @@ class DocumentCreate(BaseModel):
 class DocumentResponse(DocumentCreate):
     id: int
     verification_status: str
+    confidence_score: int | None = None
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+# ==========================================================
+# Document Summary
+# ==========================================================
+
+class DocumentSummaryResponse(BaseModel):
+    id: int
+    document_type: str
+    verification_status: str
+    confidence_score: int | None = None
 
     model_config = {
         "from_attributes": True
