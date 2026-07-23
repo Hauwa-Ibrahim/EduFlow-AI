@@ -14,6 +14,9 @@ function Login() {
     setError("");
 
     try {
+      console.log("========== LOGIN START ==========");
+      console.log("Step 1: Preparing request");
+
       const formData = new URLSearchParams();
 
       formData.append("grant_type", "password");
@@ -22,6 +25,8 @@ function Login() {
       formData.append("scope", "");
       formData.append("client_id", "");
       formData.append("client_secret", "");
+
+      console.log("Step 2: Sending request");
 
       const response = await api.post(
         "/auth/login",
@@ -33,7 +38,7 @@ function Login() {
         }
       );
 
-      console.log("Login Successful");
+      console.log("Step 3: Login successful");
       console.log(response.data);
 
       localStorage.setItem(
@@ -41,13 +46,25 @@ function Login() {
         response.data.access_token
       );
 
+      console.log("Step 4: Token saved");
+      console.log(
+        localStorage.getItem("token")
+      );
+
+      console.log("Step 5: Navigating to dashboard");
+
       navigate("/dashboard");
 
+      console.log("Step 6: Navigation completed");
+      console.log("========== LOGIN END ==========");
+
     } catch (err) {
-      console.log("Login Error:", err);
-      console.log("Response:", err.response);
-      console.log("Status:", err.response?.status);
-      console.log("Data:", err.response?.data);
+      console.error("========== LOGIN FAILED ==========");
+      console.error("Full Error:", err);
+      console.error("Response:", err.response);
+      console.error("Status:", err.response?.status);
+      console.error("Data:", err.response?.data);
+      console.error("=================================");
 
       setError("Invalid email or password.");
     }
@@ -68,7 +85,9 @@ function Login() {
           type="email"
           placeholder="Email"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) =>
+            setUsername(e.target.value)
+          }
           required
         />
 
@@ -79,7 +98,9 @@ function Login() {
           type="password"
           placeholder="Password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) =>
+            setPassword(e.target.value)
+          }
           required
         />
 
@@ -92,7 +113,12 @@ function Login() {
       </form>
 
       {error && (
-        <p style={{ color: "red" }}>
+        <p
+          style={{
+            color: "red",
+            marginTop: "20px",
+          }}
+        >
           {error}
         </p>
       )}
