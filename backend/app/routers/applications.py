@@ -9,6 +9,7 @@ from app.models.user import User
 
 from app.auth.dependencies import get_current_user
 
+
 from app.schemas.application import (
     LoanApplicationCreate,
     LoanApplicationResponse,
@@ -23,6 +24,7 @@ from app.schemas.officer_review import (
 )
 
 from app.services.officer_review_service import review_application
+from app.services.ai_eligibility import assess_application
 
 
 router = APIRouter(
@@ -107,7 +109,6 @@ def create_application(
 # ==========================================================
 # Get Application Details
 # ==========================================================
-
 @router.get(
     "/{application_id}",
     response_model=ApplicationDetailsResponse,
@@ -133,6 +134,20 @@ def get_application(
             status_code=404,
             detail="Loan application not found",
         )
+
+    # ==========================================================
+    # AI Eligibility Assessment
+    # ==========================================================
+
+    assessment = assess_application(application)
+
+    application.eligibility_score = assessment["eligibility_score"]
+    application.recommendation = assessment["recommendation"]
+    application.risk_level = assessment["risk_level"]
+    application.ai_confidence = assessment["ai_confidence"]
+
+    db.commit()
+    db.refresh(application)
 
     return ApplicationDetailsResponse(
         id=application.id,
@@ -163,7 +178,6 @@ def get_application(
             ),
         ),
     )
-
 
 # ==========================================================
 # Update Application
